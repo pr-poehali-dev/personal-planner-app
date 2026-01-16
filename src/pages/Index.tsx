@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import Icon from '@/components/ui/icon';
@@ -43,67 +43,17 @@ const taskColors = [
   { value: 'green', label: 'Зелёный', class: 'bg-gradient-to-br from-green-500 to-green-600' },
 ];
 
+const API_TASKS = 'https://functions.poehali.dev/f07380a6-e4a9-4d17-a481-1617b26e6970';
+const API_NOTES = 'https://functions.poehali.dev/d1d343b3-0134-4ac5-a63f-faea0afbb90f';
+const API_EVENTS = 'https://functions.poehali.dev/398daed3-ac6f-47c7-9edb-27271cd7d5d9';
+
 const Index = () => {
   const [activeTab, setActiveTab] = useState('tasks');
-  const [tasks, setTasks] = useState<Task[]>([
-    {
-      id: '1',
-      title: 'Разработать дизайн приложения',
-      description: 'Создать макеты основных экранов',
-      status: 'in-progress',
-      priority: 'high',
-      color: 'purple',
-      date: new Date(2026, 0, 20),
-      subtasks: [
-        { id: '1-1', title: 'Главный экран', completed: true },
-        { id: '1-2', title: 'Страница задач', completed: false },
-      ],
-    },
-    {
-      id: '2',
-      title: 'Написать техническое задание',
-      description: 'Описать требования к проекту',
-      status: 'todo',
-      priority: 'medium',
-      color: 'pink',
-      subtasks: [],
-    },
-    {
-      id: '3',
-      title: 'Созвониться с командой',
-      description: 'Обсудить прогресс',
-      status: 'done',
-      priority: 'low',
-      color: 'blue',
-      date: new Date(2026, 0, 16),
-      subtasks: [],
-    },
-  ]);
+  const [tasks, setTasks] = useState<Task[]>([]);
 
-  const [notes, setNotes] = useState<Note[]>([
-    {
-      id: '1',
-      title: 'Идеи для проекта',
-      content: 'Добавить возможность совместной работы над задачами...',
-      notebook: 'Работа',
-      color: 'purple',
-      date: new Date(2026, 0, 15),
-    },
-    {
-      id: '2',
-      title: 'Список покупок',
-      content: 'Молоко, хлеб, яйца, фрукты',
-      notebook: 'Личное',
-      color: 'orange',
-      date: new Date(2026, 0, 16),
-    },
-  ]);
+  const [notes, setNotes] = useState<Note[]>([]);
 
-  const [events, setEvents] = useState<Event[]>([
-    { id: '1', title: 'Встреча с клиентом', date: new Date(2026, 0, 18), color: 'purple', type: 'Работа' },
-    { id: '2', title: 'День рождения друга', date: new Date(2026, 0, 22), color: 'pink', type: 'Личное' },
-    { id: '3', title: 'Дедлайн проекта', date: new Date(2026, 0, 25), color: 'orange', type: 'Работа' },
-  ]);
+  const [events, setEvents] = useState<Event[]>([]);
 
   const [newTask, setNewTask] = useState({ title: '', description: '', color: 'purple', priority: 'medium' as const, status: 'todo' as const });
   const [newNote, setNewNote] = useState({ title: '', content: '', notebook: 'Работа', color: 'purple' });
@@ -115,29 +65,146 @@ const Index = () => {
     return colorObj?.class || taskColors[0].class;
   };
 
-  const handleAddTask = () => {
+  useEffect(() => {
+    fetchTasks();
+    fetchNotes();
+    fetchEvents();
+  }, []);
+
+  const fetchTasks = async () => {
+    try {
+      const response = await fetch(API_TASKS);
+      const data = await response.json();
+      setTasks(data.map((t: any) => ({
+        ...t,
+        id: t.id.toString(),
+        date: t.due_date ? new Date(t.due_date) : undefined,
+        subtasks: t.subtasks || []
+      })));
+    } catch (error) {
+      console.error('Error fetching tasks:', error);
+    }
+  };
+
+  const fetchNotes = async () => {
+    try {
+      const response = await fetch(API_NOTES);
+      const data = await response.json();
+      setNotes(data.map((n: any) => ({
+        ...n,
+        id: n.id.toString(),
+        date: new Date(n.created_at)
+      })));
+    } catch (error) {
+      console.error('Error fetching notes:', error);
+    }
+  };
+
+  const fetchEvents = async () => {
+    try {
+      const response = await fetch(API_EVENTS);
+      const data = await response.json();
+      setEvents(data.map((e: any) => ({
+        ...e,
+        id: e.id.toString(),
+        date: new Date(e.event_date),
+        type: e.event_type
+      })));
+    } catch (error) {
+      console.error('Error fetching events:', error);
+    }
+  };
+
+  const handleAddTask = async () => {
     if (newTask.title.trim()) {
-      setTasks([...tasks, { ...newTask, id: Date.now().toString(), subtasks: [] }]);
-      setNewTask({ title: '', description: '', color: 'purple', priority: 'medium', status: 'todo' });
+      try {
+        const response = await fetch(API_TASKS, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: newTask.title,
+            description: newTask.description,
+            status: newTask.status,
+            priority: newTask.priority,
+            color: newTask.color,
+            subtasks: []
+          })
+        });
+        if (response.ok) {
+          await fetchTasks();
+          setNewTask({ title: '', description: '', color: 'purple', priority: 'medium', status: 'todo' });
+        }
+      } catch (error) {
+        console.error('Error adding task:', error);
+      }
     }
   };
 
-  const handleAddNote = () => {
+  const handleAddNote = async () => {
     if (newNote.title.trim()) {
-      setNotes([...notes, { ...newNote, id: Date.now().toString(), date: new Date() }]);
-      setNewNote({ title: '', content: '', notebook: 'Работа', color: 'purple' });
+      try {
+        const response = await fetch(API_NOTES, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newNote)
+        });
+        if (response.ok) {
+          await fetchNotes();
+          setNewNote({ title: '', content: '', notebook: 'Работа', color: 'purple' });
+        }
+      } catch (error) {
+        console.error('Error adding note:', error);
+      }
     }
   };
 
-  const handleAddEvent = () => {
+  const handleAddEvent = async () => {
     if (newEvent.title.trim()) {
-      setEvents([...events, { ...newEvent, id: Date.now().toString() }]);
-      setNewEvent({ title: '', date: new Date(), color: 'purple', type: 'Работа' });
+      try {
+        const response = await fetch(API_EVENTS, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: newEvent.title,
+            event_date: newEvent.date.toISOString(),
+            color: newEvent.color,
+            event_type: newEvent.type
+          })
+        });
+        if (response.ok) {
+          await fetchEvents();
+          setNewEvent({ title: '', date: new Date(), color: 'purple', type: 'Работа' });
+        }
+      } catch (error) {
+        console.error('Error adding event:', error);
+      }
     }
   };
 
-  const moveTask = (taskId: string, newStatus: 'todo' | 'in-progress' | 'done') => {
-    setTasks(tasks.map((task) => (task.id === taskId ? { ...task, status: newStatus } : task)));
+  const moveTask = async (taskId: string, newStatus: 'todo' | 'in-progress' | 'done') => {
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
+    
+    try {
+      const response = await fetch(API_TASKS, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.dumps({
+          id: parseInt(taskId),
+          title: task.title,
+          description: task.description,
+          status: newStatus,
+          priority: task.priority,
+          color: task.color,
+          due_date: task.date?.toISOString()
+        })
+      });
+      if (response.ok) {
+        await fetchTasks();
+      }
+    } catch (error) {
+      console.error('Error moving task:', error);
+    }
   };
 
   const toggleSubtask = (taskId: string, subtaskId: string) => {
